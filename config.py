@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-TOKEN = os.getenv("BOT_TOKEN", "8415484392:AAHIbb-X0dzxMCdyczmL-FQ8aBBCOOGlSAk")
+TOKEN = os.getenv("BOT_TOKEN", "Бот токен")
 
 WAITING_LOCATION = 0
 ASKING_LOCATION = 1
@@ -19,3 +19,4 @@ SETTINGS = 9
 MANUAL_BUILDING_SELECTION = 10
 
 DB_PATH = "KGTU.db"
+
