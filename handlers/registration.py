@@ -1,118 +1,160 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ContextTypes
+from aiogram import Router, types, F
+from aiogram.fsm.context import FSMContext
+
 from database import Database
-from utils.constants import DIRECTIONS, GROUPS
-from config import REGISTRATION_CHOICE, REGISTER_GROUP, REGISTER_AGE, REGISTER_DIRECTION, REGISTER_NAME, MAIN_MENU
-from keyboards import directions_keyboard, groups_keyboard, main_menu_keyboard
+from states import Registration
+from keyboards import (get_institutes_kb, get_specialities_kb,
+                       get_location_method_kb, get_location_request_kb,
+                       get_confirm_location_kb, get_buildings_kb, get_main_menu_kb)
+from utils import find_nearest_building, format_profile
+from constants import INSTITUTES, BUILDINGS
+
+router = Router()
 
 
-db = Database()
+async def start_registration(message: types.Message, state: FSMContext):
+    await state.set_state(Registration.full_name)
+    await message.answer("Добро пожаловать! Для регистрации введите ваше ФИО:")
 
-async def registration_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    choice = update.message.text
-    user = update.message.from_user
-    
-    if choice == "✅ Зарегистрироваться":
-        await update.message.reply_text(
-            "📝 Введите ваше ФИО (например: Иванов Иван Иванович):"
+
+@router.message(Registration.full_name)
+async def process_name(message: types.Message, state: FSMContext):
+    await state.update_data(full_name=message.text)
+    await state.set_state(Registration.institute)
+    await message.answer("Выберите ваш институт:", reply_markup=get_institutes_kb())
+
+
+@router.message(Registration.institute)
+async def process_institute(message: types.Message, state: FSMContext):
+    if message.text not in INSTITUTES:
+        await message.answer("Пожалуйста, выберите институт из списка:")
+        return
+
+    await state.update_data(institute=message.text)
+    await state.set_state(Registration.speciality)
+    await message.answer(
+        "Выберите вашу специальность:",
+        reply_markup=get_specialities_kb(message.text)
+    )
+
+
+@router.message(Registration.speciality)
+async def process_speciality(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    institute = data.get('institute')
+
+    if message.text not in INSTITUTES.get(institute, []):
+        await message.answer("Пожалуйста, выберите специальность из списка:")
+        return
+
+    await state.update_data(speciality=message.text)
+    await state.set_state(Registration.location_method)
+    await message.answer(
+        "Как вы хотите определить ваше местоположение?",
+        reply_markup=get_location_method_kb()
+    )
+
+
+@router.message(Registration.location_method)
+async def process_location_method(message: types.Message, state: FSMContext):
+    if message.text == "📍 Определить автоматически":
+        await state.set_state(Registration.auto_location)
+        await message.answer(
+            "Пожалуйста, отправьте ваше местоположение:",
+            reply_markup=get_location_request_kb()
         )
-        return REGISTER_NAME
+    elif message.text == "🗺️ Выбрать вручную":
+        await state.set_state(Registration.manual_location)
+        await message.answer(
+            "Выберите здание из списка:",
+            reply_markup=get_buildings_kb()
+        )
     else:
-        await update.message.reply_text(
-            "Хорошо! Вы можете завершить регистрацию позже через настройки.\n\n"
-            "Чем могу помочь?",
-            reply_markup=main_menu_keyboard()
-        )
-        return MAIN_MENU
+        await message.answer("Пожалуйста, выберите вариант из предложенных:")
 
-async def register_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    full_name = update.message.text.strip()
-    
-    if len(full_name.split()) < 2:
-        await update.message.reply_text(
-            "Пожалуйста, введите полное ФИО (например: Иванов Иван Иванович):"
-        )
-        return REGISTER_NAME
-    
-    context.user_data['full_name'] = full_name
-    
-    await update.message.reply_text(
-        "📝 Выберите вашу учебную группу:",
-        reply_markup=groups_keyboard()
+
+@router.message(Registration.auto_location, F.location)
+async def process_auto_location(message: types.Message, state: FSMContext):
+    user_location = message.location
+    nearest = find_nearest_building(
+        user_location.latitude,
+        user_location.longitude
     )
-    return REGISTER_GROUP
 
-async def register_group(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    group = update.message.text
-    
-    if group == "🔙 Назад":
-        await update.message.reply_text(
-            "📝 Введите ваше ФИО (например: Иванов Иван Иванович):"
-        )
-        return REGISTER_NAME
-    
-    if group not in GROUPS:
-        await update.message.reply_text(
-            "Пожалуйста, выберите группу из списка:",
-            reply_markup=groups_keyboard()
-        )
-        return REGISTER_GROUP
-    
-    context.user_data['group'] = group
-    
-    await update.message.reply_text("🎂 Сколько вам лет?")
-    return REGISTER_AGE
-
-async def register_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        age = int(update.message.text)
-        if age < 16 or age > 60:
-            await update.message.reply_text("Пожалуйста, введите реальный возраст:")
-            return REGISTER_AGE
-        context.user_data['age'] = age
-        
-        await update.message.reply_text(
-            "🎯 Выберите направление обучения:",
-            reply_markup=directions_keyboard()
-        )
-        return REGISTER_DIRECTION
-    except ValueError:
-        await update.message.reply_text("Пожалуйста, введите число:")
-        return REGISTER_AGE
-
-async def register_direction(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    direction = update.message.text
-    user = update.message.from_user
-    
-    if direction == "🔙 Назад":
-        await update.message.reply_text("🎂 Сколько вам лет?")
-        return REGISTER_AGE
-    
-    if direction not in DIRECTIONS:
-        await update.message.reply_text(
-            "Пожалуйста, выберите направление из списка:",
-            reply_markup=directions_keyboard()
-        )
-        return REGISTER_DIRECTION
-    
-    full_name_parts = context.user_data['full_name'].split()
-    first_name = full_name_parts[1] if len(full_name_parts) > 1 else ""
-    last_name = full_name_parts[0] if len(full_name_parts) > 0 else ""
-    patronymic = full_name_parts[2] if len(full_name_parts) > 2 else ""
-    
-    db.update_user_info(
-        user.id,
-        first_name=first_name,
-        last_name=last_name,
-        patronymic=patronymic,
-        group_name=context.user_data['group'],
-        age=context.user_data['age'],
-        direction=direction
+    await state.update_data(
+        building=nearest,
+        latitude=user_location.latitude,
+        longitude=user_location.longitude
     )
-    
-    await update.message.reply_text(
-        "✅ Регистрация завершена!\n\n"
-        "Теперь вам доступны все функции бота:",
-        reply_markup=main_menu_keyboard()
+
+    await state.set_state(Registration.confirm_location)
+    await message.answer(
+        f"Определено ближайшее здание: {nearest}\n\nЭто верно?",
+        reply_markup=get_confirm_location_kb()
     )
-    return MAIN_MENU
+
+
+@router.message(Registration.auto_location, F.text == "↩️ Назад к выбору метода")
+async def back_to_method(message: types.Message, state: FSMContext):
+    await state.set_state(Registration.location_method)
+    await message.answer(
+        "Как вы хотите определить ваше местоположение?",
+        reply_markup=get_location_method_kb()
+    )
+
+
+@router.message(Registration.confirm_location)
+async def process_confirm_location(message: types.Message, state: FSMContext):
+    if message.text == "✅ Да, верно":
+        await save_data(message, state)
+    elif message.text == "🔄 Отправить снова":
+        await state.set_state(Registration.auto_location)
+        await message.answer(
+            "Пожалуйста, отправьте ваше местоположение:",
+            reply_markup=get_location_request_kb()
+        )
+    elif message.text == "🗺️ Выбрать вручную":
+        await state.set_state(Registration.manual_location)
+        await message.answer(
+            "Выберите здание из списка:",
+            reply_markup=get_buildings_kb()
+        )
+    else:
+        await message.answer("Пожалуйста, выберите вариант из предложенных:")
+
+
+@router.message(Registration.manual_location)
+async def process_manual_location(message: types.Message, state: FSMContext):
+    if message.text not in BUILDINGS:
+        await message.answer("Пожалуйста, выберите здание из списка:")
+        return
+
+    coords = BUILDINGS[message.text]
+    await state.update_data(
+        building=message.text,
+        latitude=coords['lat'],
+        longitude=coords['lon']
+    )
+    await save_data(message, state)
+
+
+async def save_data(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    user_data = (
+        message.from_user.id,
+        data['full_name'],
+        data['institute'],
+        data['speciality'],
+        data['building'],
+        data['latitude'],
+        data['longitude']
+    )
+
+    db = Database()
+    db.add_user(user_data)
+    await state.clear()
+
+    await message.answer(
+        f"Регистрация завершена!\n\n{format_profile(user_data)}",
+        reply_markup=get_main_menu_kb()
+    )

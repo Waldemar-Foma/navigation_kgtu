@@ -1,34 +1,22 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ContextTypes
+from aiogram import Router, types
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+
 from database import Database
-from config import WAITING_LOCATION, ASKING_LOCATION
-from utils.constants import BUILDINGS
+from keyboards import get_main_menu_kb
+from .registration import start_registration
+
+router = Router()
 
 
-db = Database()
+@router.message(Command("start"))
+async def cmd_start(message: types.Message, state: FSMContext):
+    db = Database()
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.message.from_user
-
-    context.user_data.clear()
-    context.user_data["started"] = True
-
-    db.add_user(user.id, user.username, user.first_name, user.last_name)
-
-    await update.message.reply_text(
-        f"👋 Добро пожаловать, {user.first_name}!\n\n"
-        "📍 Для определения ближайшего корпуса отправьте вашу геопозицию "
-        "или выберите корпус вручную:",
-        reply_markup=ReplyKeyboardMarkup(
-            [
-                [{"text": "📍 Отправить геолокацию", "request_location": True}],
-                ["🏢 Выбрать корпус вручную"],
-            ],
-            one_time_keyboard=True,
-            resize_keyboard=True
+    if db.user_exists(message.from_user.id):
+        await message.answer(
+            "Добро пожаловать! Выберите действие:",
+            reply_markup=get_main_menu_kb()
         )
-    )
-    return WAITING_LOCATION
-
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    return await start(update, context)
+    else:
+        await start_registration(message, state)
