@@ -1,9 +1,10 @@
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 from aiogram.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, KeyboardButton
-from constants import INSTITUTES, BUILDINGS
+from config.constants import INSTITUTES, BUILDINGS
 
 def get_main_menu_kb() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
+    builder.add(KeyboardButton(text="📍 Найти аудиторию"))
     builder.add(KeyboardButton(text="👤 Мой профиль"))
     builder.add(KeyboardButton(text="✏️ Редактировать профиль"))
     builder.adjust(1)

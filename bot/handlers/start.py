@@ -2,16 +2,17 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 
-from database import Database
-from keyboards import get_main_menu_kb
-from .registration import start_registration
+from database.models import Database
+from keyboards.builders import get_main_menu_kb
+from config.settings import DATABASE_NAME
+from handlers.registration import start_registration
 
 router = Router()
 
 
 @router.message(Command("start"))
 async def cmd_start(message: types.Message, state: FSMContext):
-    db = Database()
+    db = Database(DATABASE_NAME)
 
     if db.user_exists(message.from_user.id):
         await message.answer(

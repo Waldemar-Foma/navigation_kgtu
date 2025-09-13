@@ -1,13 +1,16 @@
 from aiogram import Router, types, F
 from aiogram.fsm.context import FSMContext
 
-from database import Database
-from states import Registration
-from keyboards import (get_institutes_kb, get_specialities_kb,
-                       get_location_method_kb, get_location_request_kb,
-                       get_confirm_location_kb, get_buildings_kb, get_main_menu_kb)
-from utils import find_nearest_building, format_profile
-from constants import INSTITUTES, BUILDINGS
+from database.models import Database
+from states.forms import Registration
+from keyboards.builders import (
+    get_institutes_kb, get_specialities_kb, get_location_method_kb,
+    get_location_request_kb, get_confirm_location_kb, get_buildings_kb, get_main_menu_kb
+)
+from utils.geolocation import find_nearest_building
+from utils.formatters import format_profile
+from config.constants import INSTITUTES, BUILDINGS
+from config.settings import DATABASE_NAME
 
 router = Router()
 
@@ -150,7 +153,7 @@ async def save_data(message: types.Message, state: FSMContext):
         data['longitude']
     )
 
-    db = Database()
+    db = Database(DATABASE_NAME)
     db.add_user(user_data)
     await state.clear()
 
