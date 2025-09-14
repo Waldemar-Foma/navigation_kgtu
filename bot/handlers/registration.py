@@ -157,7 +157,17 @@ async def save_data(message: types.Message, state: FSMContext):
     db.add_user(user_data)
     await state.clear()
 
-    await message.answer(
-        f"Регистрация завершена!\n\n{format_profile(user_data)}",
-        reply_markup=get_main_menu_kb()
-    )
+    # Получаем данные в формате словаря для отображения
+    user_data_dict = db.get_user_dict(message.from_user.id)
+
+    if user_data_dict:
+        from utils.formatters import format_profile_dict
+        await message.answer(
+            f"Регистрация завершена!\n\n{format_profile_dict(user_data_dict)}",
+            reply_markup=get_main_menu_kb()
+        )
+    else:
+        await message.answer(
+            f"Регистрация завершена!\n\n{format_profile(user_data)}",
+            reply_markup=get_main_menu_kb()
+        )

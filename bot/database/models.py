@@ -1,5 +1,6 @@
 import sqlite3
 from typing import Optional, Tuple, Dict, Any
+from datetime import datetime
 
 
 class Database:
@@ -61,3 +62,14 @@ class Database:
                 UPDATE users SET building = ?, latitude = ?, longitude = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = ?
             """, (building, lat, lon, user_id))
+
+    def get_all_users(self) -> list:
+        """Получить всех пользователей в формате списка словарей"""
+        cursor = self.conn.execute("SELECT * FROM users")
+        rows = cursor.fetchall()
+
+        if not rows:
+            return []
+
+        columns = [column[0] for column in cursor.description]
+        return [dict(zip(columns, row)) for row in rows]

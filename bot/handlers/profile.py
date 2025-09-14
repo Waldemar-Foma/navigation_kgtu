@@ -8,7 +8,7 @@ from keyboards.builders import (
     get_location_method_kb, get_location_request_kb,
     get_confirm_location_kb, get_buildings_kb, get_edit_profile_kb
 )
-from utils.formatters import format_profile
+from utils.formatters import format_profile, format_profile_dict, user_data_to_dict
 from utils.geolocation import find_nearest_building
 from config.constants import INSTITUTES, BUILDINGS
 from config.settings import DATABASE_NAME
@@ -19,10 +19,12 @@ router = Router()
 @router.message(F.text == "👤 Мой профиль")
 async def show_profile(message: types.Message):
     db = Database(DATABASE_NAME)
-    user_data = db.get_user(message.from_user.id)
 
-    if user_data:
-        await message.answer(format_profile(user_data))
+    # Получаем данные в формате словаря
+    user_data_dict = db.get_user_dict(message.from_user.id)
+
+    if user_data_dict:
+        await message.answer(format_profile_dict(user_data_dict))
     else:
         await message.answer("Профиль не найден. Пройдите регистрацию.")
 
@@ -39,6 +41,15 @@ async def edit_profile(message: types.Message):
 async def process_edit(callback: types.CallbackQuery, state: FSMContext):
     action = callback.data.split("_")[1]
 
+    db = Database(DATABASE_NAME)
+    # Получаем данные в формате словаря
+    user_data_dict = db.get_user_dict(callback.from_user.id)
+
+    if not user_data_dict:
+        await callback.message.answer("Профиль не найден. Пройдите регистрацию.")
+        await callback.answer()
+        return
+
     if action == "full_name":
         await state.set_state(EditProfile.full_name)
         await callback.message.answer("Введите новое ФИО:")
@@ -46,17 +57,12 @@ async def process_edit(callback: types.CallbackQuery, state: FSMContext):
         await state.set_state(EditProfile.institute)
         await callback.message.answer("Выберите новый институт:", reply_markup=get_institutes_kb())
     elif action == "speciality":
-        db = Database(DATABASE_NAME)
-        user_data = db.get_user(callback.from_user.id)
-        if user_data:
-            await state.update_data(current_institute=user_data[2])
-            await state.set_state(EditProfile.speciality)
-            await callback.message.answer(
-                "Выберите новую специальность:",
-                reply_markup=get_specialities_kb(user_data[2])
-            )
-        else:
-            await callback.message.answer("Профиль не найден. Пройдите регистрацию.")
+        await state.update_data(current_institute=user_data_dict['institute'])
+        await state.set_state(EditProfile.speciality)
+        await callback.message.answer(
+            "Выберите новую специальность:",
+            reply_markup=get_specialities_kb(user_data_dict['institute'])
+        )
     elif action == "location":
         await state.set_state(EditProfile.location_method)
         await callback.message.answer(
@@ -196,3 +202,35 @@ async def process_edit_manual_location(message: types.Message, state: FSMContext
 
     await state.clear()
     await message.answer("Местоположение обновлено!", reply_markup=get_main_menu_kb())
+
+
+# Добавляем обработчик для административных функций (пример)
+@router.message(F.text == "📊 Статистика пользователей")
+async def show_stats(message: types.Message):
+    # Проверка прав администратора (можно реализовать отдельно)
+    if message.from_user.id != 123456789:  # Замените на ID администратора
+        await message.answer("У вас нет прав для выполнения этой команды.")
+        return
+
+    db = Database(DATABASE_NAME)
+    users = db.get_all_users()
+
+    if not users:
+        await message.answer("Нет зарегистрированных пользователей.")
+        return
+
+    stats_text = f"📊 Статистика пользователей:\n\nВсего пользователей: {len(users)}\n\n"
+
+    # Группировка по институтам
+    institutes = {}
+    for user in users:
+        institute = user['institute']
+        if institute not in institutes:
+            institutes[institute] = 0
+        institutes[institute] += 1
+
+    stats_text += "📈 Распределение по институтам:\n"
+    for institute, count in institutes.items():
+        stats_text += f"• {institute}: {count} чел.\n"
+
+    await message.answer(stats_text)
